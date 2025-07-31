@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tägliche KI-Nachrichten-Zusammenfassung</title>
+    <!-- Tailwind CSS CDN für schnelles Styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Benutzerdefinierte Stile für die Schriftart Inter und allgemeine Ästhetik */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5; /* Heller grauer Hintergrund */
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .news-card {
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            margin-bottom: 20px;
+            padding: 25px;
+            transition: transform 0.2s ease-in-out;
+        }
+        .news-card:hover {
+            transform: translateY(-5px);
+        }
+        .category-tag {
+            display: inline-block;
+            background-color: #e0f2f7; /* Hellblau für Kategorie */
+            color: #2a6f8b;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        .source-link {
+            color: #4a90e2; /* Blau für Links */
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .source-link:hover {
+            text-decoration: underline;
+        }
+        .refresh-button, .read-aloud-button {
+            background-color: #4a90e2;
+            color: white;
+            padding: 12px 25px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            border: none;
+            outline: none;
+        }
+        .refresh-button:hover, .read-aloud-button:hover {
+            background-color: #357ABD;
+        }
+        .read-aloud-button {
+            padding: 8px 15px;
+            font-size: 0.9em;
+            margin-top: 15px;
+            background-color: #28a745; /* Grün für Vorlesefunktion */
+        }
+        .read-aloud-button:hover {
+            background-color: #218838;
+        }
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #4a90e2;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            display: none; /* Standardmäßig ausgeblendet */
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="p-4">
+    <div class="container">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-extrabold text-gray-900 mb-2">Tägliche KI-Nachrichten</h1>
+            <p id="current-date" class="text-lg text-gray-600 mb-4"></p>
+            <button id="refresh-button" class="refresh-button">Nachrichten aktualisieren</button>
+            <div id="loading-indicator" class="loading-spinner"></div>
+        </header>
+
+        <main id="news-container">
+            <!-- Nachrichtenartikel werden hier geladen -->
+            <div class="text-center text-gray-500 p-8" id="initial-message">
+                Lade die neuesten KI-Nachrichten...
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Initialisiere Firebase-Variablen (diese werden von der Canvas-Umgebung bereitgestellt)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+
+        // Globale Variable, um die aktuelle Sprachausgabe zu verfolgen
+        let currentUtterance = null;
+
+        // Funktion zum Abrufen des aktuellen Datums in einem lesbaren Format
+        function getCurrentDateFormatted() {
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            return new Date().toLocaleDateString('de-DE', options);
+        }
+
+        // Funktion zum Formatieren eines Datums als YYYY-MM-DD
+        function formatDate(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0'); // Monate sind 0-indiziert
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        // Funktion zum Anzeigen von Nachrichten an den Benutzer
+        function showMessage(message, isError = false) {
+            const newsContainer = document.getElementById('news-container');
+            newsContainer.innerHTML = `<div class="text-center p-8 ${isError ? 'text-red-600' : 'text-gray-500'}">${message}</div>`;
+        }
+
+        // Funktion zum Umschalten der Sichtbarkeit der Ladeanzeige
+        function toggleLoading(show) {
+            const loadingIndicator = document.getElementById('loading-indicator');
+            const refreshButton = document.getElementById('refresh-button');
+            const initialMessage = document.getElementById('initial-message');
+
+            if (show) {
+                loadingIndicator.style.display = 'block';
+                refreshButton.disabled = true;
+                if (initialMessage) initialMessage.style.display = 'none'; // Verstecke die initiale Nachricht beim Laden
+            } else {
+                loadingIndicator.style.display = 'none';
+                refreshButton.disabled = false;
+            }
+        }
+
+        // Funktion zum Sprechen des Textes
+        function speakText(text) {
+            // Beende jede laufende Sprachausgabe
+            if (speechSynthesis.speaking) {
+                speechSynthesis.cancel();
+            }
+
+            currentUtterance = new SpeechSynthesisUtterance(text);
+            currentUtterance.lang = 'de-DE'; // Sprache auf Deutsch setzen
+            currentUtterance.rate = 1.5; // Sprechgeschwindigkeit auf 1.5 setzen
+
+            // Optional: Stimme einstellen (Sie können Stimmen durchgehen, um eine passende zu finden)
+            // const voices = speechSynthesis.getVoices();
+            // const germanVoice = voices.find(voice => voice.lang === 'de-DE');
+            // if (germanVoice) {
+            //     currentUtterance.voice = germanVoice;
+            // }
+
+            speechSynthesis.speak(currentUtterance);
+        }
+
+        // Funktion zum Abrufen und Zusammenfassen von KI-Nachrichten
+        async function fetchAndSummarizeAINews() {
+            toggleLoading(true);
+            document.getElementById('news-container').innerHTML = ''; // Vorherige Nachrichten löschen
+            document.getElementById('current-date').textContent = `Datum: ${getCurrentDateFormatted()}`;
+
+            // Beende jede laufende Sprachausgabe, wenn neue Nachrichten abgerufen werden
+            if (speechSynthesis.speaking) {
+                speechSynthesis.cancel();
+            }
+
+            try {
+                // Berechne das heutige und gestrige Datum
+                const today = new Date();
+                const yesterday = new Date(today);
+                yesterday.setDate(today.getDate() - 1);
+
+                const todayFormatted = formatDate(today);
+                const yesterdayFormatted = formatDate(yesterday);
+
+                // Definiere Suchanfragen für relevante KI-Nachrichten
+                const searchQueries = [
+                    "KI-Technologie-Durchbrüche TechCrunch",
+                    "KI-Forschungsfortschritte The Verge",
+                    "KI-Anwendungen MIT Technology Review",
+                    "KI-Unternehmensentwicklungen Financial Times",
+                    "KI-Finanzierungsrunden Reuters",
+                    "KI-Partnerschaften Bloomberg",
+                    "KI-Regulierungen Europa",
+                    "Neue KI-Produkte USA",
+                    "AI technological breakthroughs TechCrunch",
+                    "AI research advancements The Verge",
+                    "AI innovative applications MIT Technology Review",
+                    "AI company developments Financial Times",
+                    "AI funding rounds Reuters",
+                    "AI strategic partnerships Bloomberg",
+                    "AI regulations Europe",
+                    "New AI products USA"
+                ];
+
+                // Rufe das LLM auf, um Suchen durchzuführen und zusammenzufassen
+                const prompt = `
+                    Finde die 3 bis 5 bemerkenswertesten Nachrichten des aktuellen Tages über Künstliche Intelligenz und relevante KI-Unternehmen.
+                    Fokusbereiche sind: Technologische Durchbrüche, Unternehmensentwicklungen, Marktverändernde Ereignisse.
+                    Geografischer Fokus: USA, Europa.
+                    Priorisiere seriöse und renommierte Tech- und Wirtschaftsmedien wie: TechCrunch, The Verge, MIT Technology Review, Financial Times, Reuters, Bloomberg, spezialisierte KI-Blogs und -Newsletter mit hohem Ansehen.
+                    **Wichtig:** Berücksichtige nur Artikel, die am ${todayFormatted} oder ${yesterdayFormatted} veröffentlicht wurden.
+
+                    Für jede Nachricht gib folgende Informationen im JSON-Format zurück:
+                    {
+                        "headline": "Kurzer, aussagekräftiger Titel der Nachricht.",
+                        "category": "Eine kurze Angabe, ob es sich um eine 'Technologie', 'Unternehmen' oder 'Markt'-Nachricht handelt.",
+                        "summary": "Eine prägnante Zusammenfassung (maximal 70-100 Wörter), die die Kerninformationen und die Bedeutung hervorhebt.",
+                        "source": "Name der Originalquelle (z.B. TechCrunch).",
+                        "link": "Ein direkter, anklickbarer Link zum vollständigen Artikel der Originalquelle.",
+                        "publicationDate": "Datum der Veröffentlichung im Format YYYY-MM-DD."
+                    }
+                    Gib nur das JSON-Array zurück, ohne zusätzlichen Text.
+                `;
+
+                const chatHistory = [];
+                chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+
+                const payload = {
+                    contents: chatHistory,
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "ARRAY",
+                            items: {
+                                type: "OBJECT",
+                                properties: {
+                                    "headline": { "type": "STRING" },
+                                    "category": { "type": "STRING" },
+                                    "summary": { "type": "STRING" },
+                                    "source": { "type": "STRING" },
+                                    "link": { "type": "STRING" },
+                                    "publicationDate": { "type": "STRING" }
+                                },
+                                "propertyOrdering": ["headline", "category", "summary", "source", "link", "publicationDate"]
+                            }
+                        }
+                    }
+                };
+
+                const apiKey = ""; // Canvas stellt diesen zur Laufzeit bereit
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`API-Fehler: ${response.status} ${response.statusText} - ${errorText}`);
+                }
+
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const jsonString = result.candidates[0].content.parts[0].text;
+                    const newsData = JSON.parse(jsonString);
+
+                    // Filtere Nachrichten, um nur Artikel von heute oder gestern einzuschließen
+                    const filteredNews = newsData.filter(news => {
+                        return news.publicationDate === todayFormatted || news.publicationDate === yesterdayFormatted;
+                    });
+
+                    renderNews(filteredNews);
+                } else {
+                    showMessage("Keine Nachrichten gefunden. Bitte versuchen Sie es später erneut.");
+                }
+
+            } catch (error) {
+                console.error("Fehler beim Abrufen der Nachrichten:", error);
+                showMessage(`Fehler beim Laden der Nachrichten: ${error.message}. Bitte versuchen Sie es später erneut.`, true);
+            } finally {
+                toggleLoading(false);
+            }
+        }
+
+        // Funktion zum Rendern von Nachrichtenartikeln auf der Seite
+        function renderNews(newsItems) {
+            const newsContainer = document.getElementById('news-container');
+            newsContainer.innerHTML = ''; // Bestehende Nachrichten löschen
+
+            if (newsItems.length === 0) {
+                showMessage("Keine Nachrichten für heute oder gestern verfügbar.");
+                return;
+            }
+
+            newsItems.forEach(news => {
+                const newsCard = document.createElement('div');
+                newsCard.className = 'news-card';
+
+                newsCard.innerHTML = `
+                    <div class="category-tag">${news.category}</div>
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-3">${news.headline}</h2>
+                    <p class="text-gray-700 mb-4">${news.summary}</p>
+                    <p class="text-sm text-gray-600 mb-2">Quelle: <span class="font-medium">${news.source}</span></p>
+                    ${news.publicationDate ? `<p class="text-sm text-gray-600 mb-2">Veröffentlicht: <span class="font-medium">${news.publicationDate}</span></p>` : ''}
+                    <a href="${news.link}" target="_blank" rel="noopener noreferrer" class="source-link">
+                        Vollständigen Artikel lesen &rarr;
+                    </a>
+                    <button class="read-aloud-button" data-summary="${news.summary}">Vorlesen</button>
+                `;
+                newsContainer.appendChild(newsCard);
+            });
+
+            // Füge Event-Listener zu allen "Vorlesen"-Buttons hinzu
+            document.querySelectorAll('.read-aloud-button').forEach(button => {
+                button.addEventListener('click', (event) => {
+                    const summary = event.target.dataset.summary;
+                    speakText(summary);
+                });
+            });
+        }
+
+        // Event-Listener für den Aktualisierungs-Button
+        document.getElementById('refresh-button').addEventListener('click', fetchAndSummarizeAINews);
+
+        // Initiales Laden der Nachrichten, wenn die Seite bereit ist
+        window.onload = fetchAndSummarizeAINews;
+    </script>
+</body>
+</html>
+
+  
