@@ -3,7 +3,11 @@
   "version": "1.0.0",
   "description": "Netlify functions for AI news app",
   "main": "get-news.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
   "dependencies": {
     "node-fetch": "^2.6.1"
   }
 }
+
