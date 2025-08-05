@@ -1,0 +1,9 @@
+{
+  "name": "ai-news-functions",
+  "version": "1.0.0",
+  "description": "Netlify functions for AI news app",
+  "main": "get-news.js",
+  "dependencies": {
+    "node-fetch": "^2.6.1"
+  }
+}
