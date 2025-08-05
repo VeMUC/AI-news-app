@@ -181,110 +181,16 @@
             }
 
             try {
-                // Berechne das heutige und gestrige Datum
-                const today = new Date();
-                const yesterday = new Date(today);
-                yesterday.setDate(today.getDate() - 1);
-
-                const todayFormatted = formatDate(today);
-                const yesterdayFormatted = formatDate(yesterday);
-
-                // Definiere Suchanfragen für relevante KI-Nachrichten
-                const searchQueries = [
-                    "KI-Technologie-Durchbrüche TechCrunch",
-                    "KI-Forschungsfortschritte The Verge",
-                    "KI-Anwendungen MIT Technology Review",
-                    "KI-Unternehmensentwicklungen Financial Times",
-                    "KI-Finanzierungsrunden Reuters",
-                    "KI-Partnerschaften Bloomberg",
-                    "KI-Regulierungen Europa",
-                    "Neue KI-Produkte USA",
-                    "AI technological breakthroughs TechCrunch",
-                    "AI research advancements The Verge",
-                    "AI innovative applications MIT Technology Review",
-                    "AI company developments Financial Times",
-                    "AI funding rounds Reuters",
-                    "AI strategic partnerships Bloomberg",
-                    "AI regulations Europe",
-                    "New AI products USA"
-                ];
-
-                // Rufe das LLM auf, um Suchen durchzuführen und zusammenzufassen
-                const prompt = `
-                    Finde die 3 bis 5 bemerkenswertesten Nachrichten des aktuellen Tages über Künstliche Intelligenz und relevante KI-Unternehmen.
-                    Fokusbereiche sind: Technologische Durchbrüche, Unternehmensentwicklungen, Marktverändernde Ereignisse.
-                    Geografischer Fokus: USA, Europa.
-                    Priorisiere seriöse und renommierte Tech- und Wirtschaftsmedien wie: TechCrunch, The Verge, MIT Technology Review, Financial Times, Reuters, Bloomberg, spezialisierte KI-Blogs und -Newsletter mit hohem Ansehen.
-                    **Wichtig:** Berücksichtige nur Artikel, die am ${todayFormatted} oder ${yesterdayFormatted} veröffentlicht wurden.
-
-                    Für jede Nachricht gib folgende Informationen im JSON-Format zurück:
-                    {
-                        "headline": "Kurzer, aussagekräftiger Titel der Nachricht.",
-                        "category": "Eine kurze Angabe, ob es sich um eine 'Technologie', 'Unternehmen' oder 'Markt'-Nachricht handelt.",
-                        "summary": "Eine prägnante Zusammenfassung (maximal 70-100 Wörter auf Deutsch), die die Kerninformationen und die Bedeutung hervorhebt.",
-                        "source": "Name der Originalquelle (z.B. TechCrunch).",
-                        "link": "Ein direkter, anklickbarer Link zum vollständigen Artikel der Originalquelle.",
-                        "publicationDate": "Datum der Veröffentlichung im Format YYYY-MM-DD."
-                    }
-                    Gib nur das JSON-Array zurück, ohne zusätzlichen Text.
-                `;
-
-                const chatHistory = [];
-                chatHistory.push({ role: "user", parts: [{ text: prompt }] });
-
-                const payload = {
-                    contents: chatHistory,
-                    generationConfig: {
-                        responseMimeType: "application/json",
-                        responseSchema: {
-                            type: "ARRAY",
-                            items: {
-                                type: "OBJECT",
-                                properties: {
-                                    "headline": { "type": "STRING" },
-                                    "category": { "type": "STRING" },
-                                    "summary": { "type": "STRING" },
-                                    "source": { "type": "STRING" },
-                                    "link": { "type": "STRING" },
-                                    "publicationDate": { "type": "STRING" }
-                                },
-                                "propertyOrdering": ["headline", "category", "summary", "source", "link", "publicationDate"]
-                            }
-                        }
-                    }
-                };
-
-                const apiKey = ""; // Canvas stellt diesen zur Laufzeit bereit
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+                // Sende eine Anfrage an die Netlify-Funktion, um Nachrichten abzurufen
+                // Die Funktion wird den Gemini API-Aufruf sicher verarbeiten
+                const response = await fetch('/.netlify/functions/get-news');
 
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`API-Fehler: ${response.status} ${response.statusText} - ${errorText}`);
+                    throw new Error(`Server-Fehler: ${response.status} ${response.statusText}`);
                 }
 
-                const result = await response.json();
-
-                if (result.candidates && result.candidates.length > 0 &&
-                    result.candidates[0].content && result.candidates[0].content.parts &&
-                    result.candidates[0].content.parts.length > 0) {
-                    const jsonString = result.candidates[0].content.parts[0].text;
-                    const newsData = JSON.parse(jsonString);
-
-                    // Filtere Nachrichten, um nur Artikel von heute oder gestern einzuschließen
-                    const filteredNews = newsData.filter(news => {
-                        return news.publicationDate === todayFormatted || news.publicationDate === yesterdayFormatted;
-                    });
-
-                    renderNews(filteredNews);
-                } else {
-                    showMessage("Keine Nachrichten gefunden. Bitte versuchen Sie es später erneut.");
-                }
+                const newsData = await response.json();
+                renderNews(newsData);
 
             } catch (error) {
                 console.error("Fehler beim Abrufen der Nachrichten:", error);
@@ -299,15 +205,15 @@
             const newsContainer = document.getElementById('news-container');
             newsContainer.innerHTML = ''; // Bestehende Nachrichten löschen
 
-            if (newsItems.length === 0) {
+            if (!newsItems || newsItems.length === 0) {
                 showMessage("Keine Nachrichten für heute oder gestern verfügbar.");
                 return;
             }
 
             newsItems.forEach(news => {
-            // Erstelle einen Google-Suchlink basierend auf Überschrift und Quelle
-const searchQueryParams = encodeURIComponent(`${news.headline} ${news.source}`);
-const googleSearchLink = `https://www.google.com/search?q=${searchQueryParams}`;
+                // Erstelle einen Google-Suchlink basierend auf Überschrift und Quelle
+                const searchQueryParams = encodeURIComponent(`${news.headline} ${news.source}`);
+                const googleSearchLink = `https://www.google.com/search?q=${searchQueryParams}`;
 
                 const newsCard = document.createElement('div');
                 newsCard.className = 'news-card';
@@ -319,9 +225,7 @@ const googleSearchLink = `https://www.google.com/search?q=${searchQueryParams}`;
                     <p class="text-sm text-gray-600 mb-2">Quelle: <span class="font-medium">${news.source}</span></p>
                     ${news.publicationDate ? `<p class="text-sm text-gray-600 mb-2">Veröffentlicht: <span class="font-medium">${news.publicationDate}</span></p>` : ''}
                     <a href="${googleSearchLink}" target="_blank" rel="noopener noreferrer" class="source-link">
-    Artikel auf Google suchen &rarr;
-</a>
-;
+                        Artikel auf Google suchen &rarr;
                     </a>
                     <button class="read-aloud-button" data-summary="${news.summary}">Vorlesen</button>
                 `;
@@ -345,5 +249,3 @@ const googleSearchLink = `https://www.google.com/search?q=${searchQueryParams}`;
     </script>
 </body>
 </html>
-
-  
