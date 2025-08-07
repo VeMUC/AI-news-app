@@ -98,6 +98,9 @@ exports.handler = async function(event, context) {
 
         return {
             statusCode: 200,
+            headers: {
+                'Access-Control-Allow-Origin': '*' // <- Dies ist der wichtige neue Header
+            },
             body: JSON.stringify(filteredNews)
         };
 
@@ -105,6 +108,9 @@ exports.handler = async function(event, context) {
         console.error("Fehler beim Abrufen der Nachrichten:", error);
         return {
             statusCode: 500,
+            headers: {
+                'Access-Control-Allow-Origin': '*' // <- Dies ist der wichtige neue Header
+            },
             body: JSON.stringify({ error: `Fehler beim Laden der Nachrichten: ${error.message}` })
         };
     }
