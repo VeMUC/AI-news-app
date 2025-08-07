@@ -3,249 +3,115 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tägliche KI-Nachrichten-Zusammenfassung</title>
-    <!-- Tailwind CSS CDN für schnelles Styling -->
+    <title>AI News App</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        /* Benutzerdefinierte Stile für die Schriftart Inter und allgemeine Ästhetik */
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f0f2f5; /* Heller grauer Hintergrund */
-            color: #333;
-            line-height: 1.6;
+            background-color: #f3f4f6;
+            color: #1f2937;
         }
         .container {
-            max-width: 960px;
+            max-width: 900px;
             margin: 0 auto;
-            padding: 20px;
-        }
-        .news-card {
-            background-color: #ffffff;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-            margin-bottom: 20px;
-            padding: 25px;
-            transition: transform 0.2s ease-in-out;
-        }
-        .news-card:hover {
-            transform: translateY(-5px);
-        }
-        .category-tag {
-            display: inline-block;
-            background-color: #e0f2f7; /* Hellblau für Kategorie */
-            color: #2a6f8b;
-            padding: 6px 12px;
-            border-radius: 8px;
-            font-size: 0.85em;
-            font-weight: 600;
-            margin-bottom: 10px;
-        }
-        .source-link {
-            color: #4a90e2; /* Blau für Links */
-            text-decoration: none;
-            font-weight: 500;
-        }
-        .source-link:hover {
-            text-decoration: underline;
-        }
-        .refresh-button, .read-aloud-button {
-            background-color: #4a90e2;
-            color: white;
-            padding: 12px 25px;
-            border-radius: 8px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-            border: none;
-            outline: none;
-        }
-        .refresh-button:hover, .read-aloud-button:hover {
-            background-color: #357ABD;
-        }
-        .read-aloud-button {
-            padding: 8px 15px;
-            font-size: 0.9em;
-            margin-top: 15px;
-            background-color: #28a745; /* Grün für Vorlesefunktion */
-        }
-        .read-aloud-button:hover {
-            background-color: #218838;
+            padding: 1.5rem;
         }
         .loading-spinner {
-            border: 4px solid rgba(0, 0, 0, 0.1);
-            border-left-color: #4a90e2;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            animation: spin 1s linear infinite;
-            display: none; /* Standardmäßig ausgeblendet */
-            margin: 20px auto;
+            border-top-color: #3b82f6;
+            -webkit-animation: spinner 1s linear infinite;
+            animation: spinner 1s linear infinite;
         }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        @-webkit-keyframes spinner {
+            to {transform: rotate(360deg);}
+        }
+        @keyframes spinner {
+            to {transform: rotate(360deg);}
         }
     </style>
 </head>
-<body class="p-4">
-    <div class="container">
-        <header class="text-center mb-8">
-            <h1 class="text-4xl font-extrabold text-gray-900 mb-2">Tägliche KI-Nachrichten</h1>
-            <p id="current-date" class="text-lg text-gray-600 mb-4"></p>
-            <button id="refresh-button" class="refresh-button">Nachrichten aktualisieren</button>
-            <div id="loading-indicator" class="loading-spinner"></div>
-        </header>
+<body class="bg-gray-100 flex flex-col items-center min-h-screen">
 
-        <main id="news-container">
-            <!-- Nachrichtenartikel werden hier geladen -->
-            <div class="text-center text-gray-500 p-8" id="initial-message">
-                Lade die neuesten KI-Nachrichten...
+    <div class="container bg-white shadow-xl rounded-xl p-8 my-10">
+        <h1 class="text-4xl font-bold text-center text-gray-800 mb-6">Aktuelle AI News</h1>
+        <p class="text-center text-gray-600 mb-8">
+            Eine Zusammenfassung der wichtigsten Entwicklungen im Bereich der Künstlichen Intelligenz.
+        </p>
+
+        <div id="news-container" class="space-y-6">
+            <!-- News-Karten werden hier dynamisch eingefügt -->
+            <div id="loading-indicator" class="flex justify-center items-center h-40">
+                <div class="loading-spinner w-12 h-12 border-4 border-gray-200 rounded-full"></div>
             </div>
-        </main>
+        </div>
+
+        <div id="message-box" class="mt-8 text-center hidden">
+            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                <span id="message-text"></span>
+            </div>
+        </div>
+
     </div>
 
     <script>
-        // Initialisiere Firebase-Variablen (diese werden von der Canvas-Umgebung bereitgestellt)
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchNews();
+        });
 
-        // Globale Variable, um die aktuelle Sprachausgabe zu verfolgen
-        let currentUtterance = null;
-
-        // Funktion zum Abrufen des aktuellen Datums in einem lesbaren Format
-        function getCurrentDateFormatted() {
-            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-            return new Date().toLocaleDateString('de-DE', options);
-        }
-
-        // Funktion zum Formatieren eines Datums als YYYY-MM-DD
-        function formatDate(date) {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0'); // Monate sind 0-indiziert
-            const day = String(date.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        }
-
-        // Funktion zum Anzeigen von Nachrichten an den Benutzer
-        function showMessage(message, isError = false) {
-            const newsContainer = document.getElementById('news-container');
-            newsContainer.innerHTML = `<div class="text-center p-8 ${isError ? 'text-red-600' : 'text-gray-500'}">${message}</div>`;
-        }
-
-        // Funktion zum Umschalten der Sichtbarkeit der Ladeanzeige
-        function toggleLoading(show) {
+        async function fetchNews() {
             const loadingIndicator = document.getElementById('loading-indicator');
-            const refreshButton = document.getElementById('refresh-button');
-            const initialMessage = document.getElementById('initial-message');
+            const newsContainer = document.getElementById('news-container');
+            const messageBox = document.getElementById('message-box');
+            const messageText = document.getElementById('message-text');
 
-            if (show) {
-                loadingIndicator.style.display = 'block';
-                refreshButton.disabled = true;
-                if (initialMessage) initialMessage.style.display = 'none'; // Verstecke die initiale Nachricht beim Laden
-            } else {
-                loadingIndicator.style.display = 'none';
-                refreshButton.disabled = false;
-            }
-        }
-
-        // Funktion zum Sprechen des Textes
-        function speakText(text) {
-            // Beende jede laufende Sprachausgabe
-            if (speechSynthesis.speaking) {
-                speechSynthesis.cancel();
-            }
-
-            currentUtterance = new SpeechSynthesisUtterance(text);
-            currentUtterance.lang = 'de-DE'; // Sprache auf Deutsch setzen
-            currentUtterance.rate = 1.5; // Sprechgeschwindigkeit auf 1.5 setzen
-
-            // Optional: Stimme einstellen (Sie können Stimmen durchgehen, um eine passende zu finden)
-            // const voices = speechSynthesis.getVoices();
-            // const germanVoice = voices.find(voice => voice.lang === 'de-DE');
-            // if (germanVoice) {
-            //     currentUtterance.voice = germanVoice;
-            // }
-
-            speechSynthesis.speak(currentUtterance);
-        }
-
-        // Funktion zum Abrufen und Zusammenfassen von KI-Nachrichten
-        async function fetchAndSummarizeAINews() {
-            toggleLoading(true);
-            document.getElementById('news-container').innerHTML = ''; // Vorherige Nachrichten löschen
-            document.getElementById('current-date').textContent = `Datum: ${getCurrentDateFormatted()}`;
-
-            // Beende jede laufende Sprachausgabe, wenn neue Nachrichten abgerufen werden
-            if (speechSynthesis.speaking) {
-                speechSynthesis.cancel();
-            }
+            newsContainer.innerHTML = '';
+            loadingIndicator.classList.remove('hidden');
 
             try {
-                // Sende eine Anfrage an die Netlify-Funktion, um Nachrichten abzurufen
-                // Die Funktion wird den Gemini API-Aufruf sicher verarbeiten
-                const response = await fetch('/.netlify/functions/get-news');
+                // Diese URL ruft die Netlify Serverless Function auf
+                const response = await fetch('https://fabulous-mochi-973e90.netlify.app/.netlify/functions/get-news');
 
                 if (!response.ok) {
-                    throw new Error(`Server-Fehler: ${response.status} ${response.statusText}`);
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Server-Fehler: ' + response.status);
                 }
 
-                const newsData = await response.json();
-                renderNews(newsData);
+                const news = await response.json();
+
+                if (news.length === 0) {
+                    newsContainer.innerHTML = '<p class="text-center text-gray-500">Keine aktuellen Nachrichten gefunden.</p>';
+                    return;
+                }
+
+                news.forEach(article => {
+                    const card = document.createElement('div');
+                    card.className = 'bg-gray-50 p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300';
+                    card.innerHTML = `
+                        <div class="flex items-center mb-3">
+                            <span class="inline-block px-3 py-1 text-xs font-semibold text-white bg-blue-500 rounded-full">${article.category}</span>
+                            <span class="ml-3 text-sm text-gray-500">${article.source}</span>
+                            <span class="ml-auto text-xs text-gray-400">${article.publicationDate}</span>
+                        </div>
+                        <h3 class="text-xl font-semibold text-gray-900 mb-2">${article.headline}</h3>
+                        <p class="text-gray-700 leading-relaxed mb-4">${article.summary}</p>
+                        <a href="${article.link}" target="_blank" class="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200">
+                            Zum Artikel
+                        </a>
+                    `;
+                    newsContainer.appendChild(card);
+                });
 
             } catch (error) {
                 console.error("Fehler beim Abrufen der Nachrichten:", error);
-                showMessage(`Fehler beim Laden der Nachrichten: ${error.message}. Bitte versuchen Sie es später erneut.`, true);
+                messageText.textContent = `Ein Fehler ist aufgetreten: ${error.message}.`;
+                messageBox.classList.remove('hidden');
+                newsContainer.innerHTML = ''; // Leere den Container bei einem Fehler
             } finally {
-                toggleLoading(false);
+                loadingIndicator.classList.add('hidden');
             }
         }
-
-        // Funktion zum Rendern von Nachrichtenartikeln auf der Seite
-        function renderNews(newsItems) {
-            const newsContainer = document.getElementById('news-container');
-            newsContainer.innerHTML = ''; // Bestehende Nachrichten löschen
-
-            if (!newsItems || newsItems.length === 0) {
-                showMessage("Keine Nachrichten für heute oder gestern verfügbar.");
-                return;
-            }
-
-            newsItems.forEach(news => {
-                // Erstelle einen Google-Suchlink basierend auf Überschrift und Quelle
-                const searchQueryParams = encodeURIComponent(`${news.headline} ${news.source}`);
-                const googleSearchLink = `https://www.google.com/search?q=${searchQueryParams}`;
-
-                const newsCard = document.createElement('div');
-                newsCard.className = 'news-card';
-
-                newsCard.innerHTML = `
-                    <div class="category-tag">${news.category}</div>
-                    <h2 class="text-2xl font-semibold text-gray-800 mb-3">${news.headline}</h2>
-                    <p class="text-gray-700 mb-4">${news.summary}</p>
-                    <p class="text-sm text-gray-600 mb-2">Quelle: <span class="font-medium">${news.source}</span></p>
-                    ${news.publicationDate ? `<p class="text-sm text-gray-600 mb-2">Veröffentlicht: <span class="font-medium">${news.publicationDate}</span></p>` : ''}
-                    <a href="${googleSearchLink}" target="_blank" rel="noopener noreferrer" class="source-link">
-                        Artikel auf Google suchen &rarr;
-                    </a>
-                    <button class="read-aloud-button" data-summary="${news.summary}">Vorlesen</button>
-                `;
-                newsContainer.appendChild(newsCard);
-            });
-
-            // Füge Event-Listener zu allen "Vorlesen"-Buttons hinzu
-            document.querySelectorAll('.read-aloud-button').forEach(button => {
-                button.addEventListener('click', (event) => {
-                    const summary = event.target.dataset.summary;
-                    speakText(summary);
-                });
-            });
-        }
-
-        // Event-Listener für den Aktualisierungs-Button
-        document.getElementById('refresh-button').addEventListener('click', fetchAndSummarizeAINews);
-
-        // Initiales Laden der Nachrichten, wenn die Seite bereit ist
-        window.onload = fetchAndSummarizeAINews;
     </script>
 </body>
 </html>
